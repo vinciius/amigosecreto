@@ -1,0 +1,3 @@
+"""
+Pacote contendo utilitários diversos
+"""
