@@ -3,6 +3,7 @@ Interface gráfica principal do aplicativo
 """
 import tkinter as tk
 from tkinter import ttk, messagebox
+import json
 
 from ..core.sorteio import realizar_sorteio
 from ..utils.file_handler import salvar_resultado
@@ -15,6 +16,15 @@ class AmigoSecretoApp:
         self.root.title("🎁 Amigo Secreto")
         self.root.geometry("600x800")
         self.root.configure(bg=styles.COLORS['bg'])
+        
+        # Inicializar dicionários
+        self.participantes = []
+        self.sorteio = {}
+        self.contatos = {}
+        self.sugestoes = {}
+        
+        # Carregar dados existentes
+        self.carregar_dados()
         
         # Configurar estilo para widgets ttk
         self.style = ttk.Style()
@@ -46,10 +56,6 @@ class AmigoSecretoApp:
             foreground=[("selected", "black")]  # Mantém o texto preto quando selecionado
         )
         
-        self.participantes = []
-        self.sorteio = {}
-        self.contatos = {}
-        
         # Criar notebook para as abas
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
@@ -62,8 +68,28 @@ class AmigoSecretoApp:
         self.contact_tab = tk.Frame(self.notebook, bg=styles.COLORS['bg'])
         self.notebook.add(self.contact_tab, text="📱 Contatos")
         
+        # Aba de sugestões
+        self.suggestions_tab = tk.Frame(self.notebook, bg=styles.COLORS['bg'])
+        self.notebook.add(self.suggestions_tab, text="💡 Sugestões")
+        
         self._setup_main_tab()
         self._setup_contact_tab()
+        self._setup_suggestions_tab()
+        
+    def carregar_dados(self):
+        # Carregar participantes
+        try:
+            with open('participantes.json', 'r') as f:
+                self.contatos = json.load(f)
+        except FileNotFoundError:
+            self.contatos = {}
+
+        # Carregar sugestões
+        try:
+            with open('sugestoes.json', 'r') as f:
+                self.sugestoes = json.load(f)
+        except FileNotFoundError:
+            self.sugestoes = {}
         
     def _setup_main_tab(self):
         # Gradiente do cabeçalho para o fundo
@@ -102,7 +128,7 @@ class AmigoSecretoApp:
             text="📱 Gerenciar Contatos",
             font=styles.FONTS['header'],
             bg=styles.COLORS['header_bg'],
-            fg='white',
+            fg='black',
             pady=15
         )
         header_label.pack()
@@ -157,6 +183,7 @@ class AmigoSecretoApp:
             width=40
         )
         self.contact_phone_entry.pack(fill=tk.X, pady=(0, 10))
+        self.contact_phone_entry.bind('<FocusIn>', self._focus_phone_entry)
         
         # Botão salvar
         save_contact_btn = tk.Button(
@@ -221,6 +248,78 @@ class AmigoSecretoApp:
             **styles.BUTTON_STYLE
         )
         remove_contact_btn.pack(pady=(0, 20))
+        
+        # Botão salvar participantes
+        save_participants_btn = tk.Button(
+            self.contact_tab,
+            text="💾 Salvar Participantes",
+            command=self.salvar_participantes,
+            bg=styles.COLORS['button'],
+            fg='black',
+            font=styles.FONTS['button'],
+            **styles.BUTTON_STYLE
+        )
+        save_participants_btn.pack(pady=(20, 0))
+        
+    def _setup_suggestions_tab(self):
+        # Seleção de participante
+        select_frame = tk.Frame(self.suggestions_tab, bg=styles.COLORS['bg'])
+        select_frame.pack(fill=tk.X, padx=20, pady=20)
+
+        select_label = tk.Label(
+            select_frame,
+            text="Selecione seu nome:",
+            font=styles.FONTS['normal'],
+            bg=styles.COLORS['bg'],
+            fg='black'
+        )
+        select_label.pack(anchor='w')
+
+        self.suggestions_participants_listbox = tk.Listbox(
+            select_frame,
+            font=styles.FONTS['normal'],
+            selectmode=tk.SINGLE,
+            bg=styles.COLORS['bg'],
+            fg='black',
+            selectbackground=styles.COLORS['button'],
+            relief=tk.FLAT,
+            highlightthickness=1,
+            highlightbackground=styles.COLORS['border'],
+            height=4
+        )
+        self.suggestions_participants_listbox.pack(fill=tk.X, pady=(5, 10))
+
+        # Frame para entrada das sugestões
+        suggestions_frame = tk.Frame(self.suggestions_tab, bg=styles.COLORS['bg'])
+        suggestions_frame.pack(fill=tk.X, padx=20)
+
+        suggestions_label = tk.Label(
+            suggestions_frame,
+            text="Suas sugestões (separe por vírgula):",
+            font=styles.FONTS['normal'],
+            bg=styles.COLORS['bg'],
+            fg='black'
+        )
+        suggestions_label.pack(anchor='w')
+
+        self.suggestions_entry = tk.Entry(
+            suggestions_frame,
+            font=styles.FONTS['normal'],
+            width=40
+        )
+        self.suggestions_entry.pack(fill=tk.X, pady=(0, 10))
+
+        # Botão para salvar sugestões
+        save_suggestions_btn = tk.Button(
+            self.suggestions_tab,
+            text="💾 Salvar Sugestões",
+            command=self.salvar_sugestoes,
+            bg=styles.COLORS['button'],
+            fg='black',
+            font=styles.FONTS['button'],
+            **styles.BUTTON_STYLE
+        )
+        save_suggestions_btn.pack(pady=(20, 0))
         
     def _setup_entry(self, parent):
         entry_frame = tk.Frame(parent, bg=styles.COLORS['bg'])
@@ -511,12 +610,16 @@ class AmigoSecretoApp:
     def _on_participant_select(self, event):
         selection = self.participants_listbox.curselection()
         if selection:
-            nome = self.participants_listbox.get(selection[0])
-            # Se já tiver telefone cadastrado, mostra no campo
-            if self.contatos[nome]:
-                self.contact_phone_entry.delete(0, tk.END)
-                self.contact_phone_entry.insert(0, self.contatos[nome])
-                
+            index = selection[0]
+            self.selected_participant = self.participants_listbox.get(index)
+            self.contact_phone_entry.focus_set()  # Focar no campo de entrada
+
+    def _focus_phone_entry(self, event):
+        if hasattr(self, 'selected_participant'):
+            index = self.participants_listbox.get(0, tk.END).index(self.selected_participant)
+            self.participants_listbox.selection_clear(0, tk.END)
+            self.participants_listbox.selection_set(index)
+            
     def _salvar_telefone(self):
         selection = self.participants_listbox.curselection()
         if not selection:
@@ -568,3 +671,25 @@ class AmigoSecretoApp:
         self.contatos[nome] = ""  # Apenas remove o telefone, mantém o nome
         self._atualizar_lista_contatos()
         self._atualizar_lista_participantes()
+
+    def salvar_participantes(self):
+        with open('participantes.json', 'w') as f:
+            json.dump(self.contatos, f, indent=4)
+        messagebox.showinfo("Sucesso", "Participantes salvos com sucesso!")
+
+    def salvar_sugestoes(self):
+        selection = self.suggestions_participants_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("Aviso", "Por favor, selecione um participante!")
+            return
+            
+        nome = self.suggestions_participants_listbox.get(selection[0])
+        sugestoes = self.suggestions_entry.get().strip()
+        
+        self.sugestoes[nome] = sugestoes.split(',')  # Armazenar sugestões como lista
+        self._salvar_sugestoes_json()  # Chamar função para salvar no JSON
+        messagebox.showinfo("Sucesso", "Sugestões salvas com sucesso!")
+
+    def _salvar_sugestoes_json(self):
+        with open('sugestoes.json', 'w') as f:
+            json.dump(self.sugestoes, f, indent=4)
